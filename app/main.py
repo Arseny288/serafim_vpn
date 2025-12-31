@@ -7,7 +7,7 @@ from .models import Base
 from .handlers import router
 from .repo import UsersRepo, DepositsRepo
 from .services import KeyService, SubscriptionService, PaymentService
-
+#i
 async def create_tables(db: Db):
     async with db.engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
