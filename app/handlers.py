@@ -3,11 +3,13 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder  # ✅ ВАЖНО
-
+from .services import SubscriptionService, PaymentService, KeyService
 from .keyboards import main_kb, profile_kb, admin_deposit_kb
 from .services import SubscriptionService, PaymentService
 from .ui import UiService
 from .repo import UsersRepo
+from app.config import Config
+from app.utils.vless import build_vless_link
 
 router = Router()
 
@@ -148,3 +150,57 @@ async def adm_no(cq: CallbackQuery, pay: PaymentService, settings):
         await cq.bot.send_message(dr.user_id, "❌ Оплата отклонена")
     except Exception:
         pass
+
+def _sub(users: UsersRepo) -> SubscriptionService:
+    return SubscriptionService(users=users, keysvc=KeyService())
+
+@router.callback_query(F.data == "activate")
+async def activate(cq: CallbackQuery, ui: UiService, subs: SubscriptionService):
+    await cq.answer()
+    await subs.activate(cq.from_user.id, days=30)
+    await ui.show_profile(cq.from_user.id, cq.message.chat.id)
+
+
+@router.callback_query(F.data == "pause")
+async def pause(cq: CallbackQuery, ui: UiService, subs: SubscriptionService):
+    await cq.answer()
+    await subs.pause(cq.from_user.id)
+    await ui.show_profile(cq.from_user.id, cq.message.chat.id)
+
+
+@router.callback_query(F.data == "get_key")
+async def get_key(cq: CallbackQuery, ui: UiService, users: UsersRepo, subs: SubscriptionService):
+    await cq.answer()
+
+    ok, reason = await subs.can_use(cq.from_user.id)
+    if not ok:
+        msg = {
+            "paused": "Профиль на паузе — нажмите «Активировать».",
+            "expired": "Подписка истекла — пополните и активируйте.",
+            "no_until": "Подписка не активирована.",
+            "banned": "Аккаунт заблокирован.",
+            "no_user": "Пользователь не найден.",
+        }.get(reason, "Недоступно.")
+        await cq.answer(msg, show_alert=True)
+        return
+
+    u = await users.get(cq.from_user.id)
+    if not u or not u.vpn_uuid or not u.vpn_email:
+        await cq.answer("Ключ ещё не создан. Нажмите «Активировать».", show_alert=True)
+        return
+
+    link = build_vless_link(vpn_uuid=u.vpn_uuid, email=u.vpn_email)
+
+    text = (
+        "🔑 <b>Ваш VPN-ключ</b>\n\n"
+        f"<code>{link}</code>\n\n"
+        "⚠️ Не делитесь ключом. Он персональный.\n"
+        "⚠️ Работает только при активной подписке"
+    )
+
+    await ui.render(
+        cq.from_user.id,
+        cq.message.chat.id,
+        text,
+        reply_markup=profile_kb(u.is_active, u.is_banned),
+    )

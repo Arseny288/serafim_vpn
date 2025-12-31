@@ -1,4 +1,3 @@
-# app/middlewares.py
 from __future__ import annotations
 
 from aiogram import BaseMiddleware
@@ -6,8 +5,10 @@ from typing import Any, Awaitable, Callable, Dict
 
 from .db import Db
 from .repo import UsersRepo, DepositsRepo
-from .services import KeyService, SubscriptionService, PaymentService
+from .services import SubscriptionService, PaymentService
 from .ui import UiService
+from .xui import XuiPanel
+from .config import Config
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -16,22 +17,21 @@ class DbSessionMiddleware(BaseMiddleware):
         self.settings = settings
         self.bot = bot
 
-    async def __call__(
-        self,
-        handler: Callable[[Any, Dict[str, Any]], Awaitable[Any]],
-        event: Any,
-        data: Dict[str, Any],
-    ) -> Any:
+    async def __call__(self, handler, event, data: Dict[str, Any]) -> Any:
         data["settings"] = self.settings
 
         async with self.db.sessionmaker() as s:
-            data["users"] = UsersRepo(s)
-            data["deposits"] = DepositsRepo(s)
+            users = UsersRepo(s)
+            deposits = DepositsRepo(s)
 
-            keysvc = KeyService()
-            data["subs"] = SubscriptionService(data["users"], keysvc)
-            data["pay"] = PaymentService(data["users"], data["deposits"])
-            data["ui"] = UiService(self.bot, data["users"])
+            data["users"] = users
+            data["deposits"] = deposits
+
+            xui = XuiPanel(Config.XUI_URL, Config.XUI_USER, Config.XUI_PASS)
+
+            data["subs"] = SubscriptionService(users, xui)
+            data["pay"] = PaymentService(users, deposits)
+            data["ui"] = UiService(self.bot, users)
 
             try:
                 result = await handler(event, data)

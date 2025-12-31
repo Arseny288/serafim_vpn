@@ -1,7 +1,9 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from datetime import datetime, timedelta
+
 from .models import User, DepositRequest
+
 
 class UsersRepo:
     def __init__(self, s: AsyncSession):
@@ -14,7 +16,6 @@ class UsersRepo:
     async def add_if_missing(self, user_id: int, username: str | None) -> User:
         u = await self.get(user_id)
         if u:
-            # обновим username, если поменялся
             if username and u.username != username:
                 u.username = username
             return u
@@ -32,22 +33,38 @@ class UsersRepo:
     async def set_active(self, user_id: int, active: bool):
         await self.s.execute(update(User).where(User.user_id == user_id).values(is_active=active))
 
-    async def set_key(self, user_id: int, key: str):
-        await self.s.execute(update(User).where(User.user_id == user_id).values(vpn_key=key))
-
     async def extend_until(self, user_id: int, days: int):
         u = await self.get(user_id)
         base = u.active_until if u and u.active_until and u.active_until > datetime.utcnow() else datetime.utcnow()
         new_until = base + timedelta(days=days)
         await self.s.execute(update(User).where(User.user_id == user_id).values(active_until=new_until))
 
-    # добавлено для UI
     async def set_menu_message_id(self, user_id: int, msg_id: int | None):
         await self.s.execute(update(User).where(User.user_id == user_id).values(menu_message_id=msg_id))
 
     async def get_menu_message_id(self, user_id: int) -> int | None:
         res = await self.s.execute(select(User.menu_message_id).where(User.user_id == user_id))
         return res.scalar()
+
+    # ✅ сохраняем identity клиента в панели
+    async def set_vpn(self, user_id: int, vpn_uuid: str, vpn_email: str):
+        await self.s.execute(
+            update(User).where(User.user_id == user_id).values(vpn_uuid=vpn_uuid, vpn_email=vpn_email)
+        )
+
+    # ✅ для expire_worker
+    async def get_expired_active(self) -> list[User]:
+        now = datetime.utcnow()
+        res = await self.s.execute(
+            select(User).where(
+                User.is_active == True,
+                User.active_until.is_not(None),
+                User.active_until < now,
+                User.vpn_uuid.is_not(None),
+            )
+        )
+        return list(res.scalars().all())
+
 
 class DepositsRepo:
     def __init__(self, s: AsyncSession):
@@ -64,6 +81,4 @@ class DepositsRepo:
         return res.scalar_one_or_none()
 
     async def set_status(self, dep_id: int, status: str):
-        await self.s.execute(
-            update(DepositRequest).where(DepositRequest.id == dep_id).values(status=status)
-        )
+        await self.s.execute(update(DepositRequest).where(DepositRequest.id == dep_id).values(status=status))

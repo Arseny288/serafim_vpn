@@ -24,3 +24,16 @@ def load_settings() -> Settings:
         monthly_price_rub=int(os.getenv("MONTHLY_PRICE_RUB", "150")),
         warning_days=int(os.getenv("WARNING_DAYS", "3")),
     )
+# app/config.py
+class Config:
+    XUI_URL = "http://79.137.197.188:8080"
+    XUI_USER = "paneladmin"
+    XUI_PASS = "mSETja7tD369"
+
+    INBOUND_ID = 2
+
+    SERVER_IP = "79.137.197.188"
+    SERVER_PORT = 443
+    PUBLIC_KEY = "kN5gCvgOrDm2ku-pyHMxeOoMH0hT3OkV-JX8a-pl3DI"
+    SNI = "google.com"
+    SHORT_ID = "7c"

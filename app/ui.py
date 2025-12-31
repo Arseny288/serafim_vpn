@@ -65,8 +65,34 @@ class UiService:
             parse_mode=parse_mode,
         )
 
+    # async def show_main_menu(self, user_id: int, chat_id: int):
+    #     u = await self.users.get(user_id)
+    #     text = "\n".join([
+    #         "⚡️ Меню:",
+    #         f"⚙️ ID: <code>{u.user_id}</code>",
+    #         "🧑‍💻 Все гайды о том, как пользоваться link",
+    #     ])
+    #
+    #     await self.render(user_id, chat_id, text, main_kb())
     async def show_main_menu(self, user_id: int, chat_id: int):
-        await self.render(user_id, chat_id, "⚡️ Меню:", main_kb())
+        u = await self.users.get(user_id)
+
+        text = "\n".join([
+            "⚡️ <b>FLASH VPN | PREMIUM NETWORK</b>",
+            "──────────────────────",
+            "",
+            "🔒 <b>SECURE.</b> Полная анонимность.",
+            "🚀 <b>FAST.</b> Скорость до 1 Gbit/s.",
+            "💎 <b>SMART.</b> YouTube 4K, Instagram.",
+            "",
+            "🏷 <b>TARIFF PLAN:</b>",
+            "135 RUB / 1 month",
+            "",
+            "──────────────────────",
+            f"⚙️ <b>User ID:</b> <code>{u.user_id}</code>",
+        ])
+
+        await self.render(user_id, chat_id, text, main_kb())
 
     async def show_profile(self, user_id: int, chat_id: int):
         u = await self.users.get(user_id)
