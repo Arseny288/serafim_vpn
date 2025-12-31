@@ -1,94 +1,71 @@
+# app/handlers.py
 from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
-from datetime import datetime
+from aiogram.utils.keyboard import InlineKeyboardBuilder  # ✅ ВАЖНО
+
 from .keyboards import main_kb, profile_kb, admin_deposit_kb
 from .services import SubscriptionService, PaymentService
-from .repo import UsersRepo, DepositsRepo
+from .ui import UiService
+from .repo import UsersRepo
 
 router = Router()
 
-def days_left(active_until):
-    if not active_until:
-        return 0
-    diff = (active_until - datetime.utcnow()).total_seconds()
-    return max(0, int(diff // 86400))
 
 @router.message(Command("start"))
-async def start(m: Message, users: UsersRepo):
+async def start(m: Message, ui: UiService, users: UsersRepo):
     await users.add_if_missing(m.from_user.id, m.from_user.username)
-    await m.answer("⚡️ Меню:", reply_markup=main_kb())
+    # ✅ всегда создаём новое меню, чтобы после очистки чата всё оживало
+    await ui.reset_menu(m.from_user.id, m.chat.id)
+
+
+@router.callback_query(F.data == "main_menu")
+async def main_menu(cq: CallbackQuery, ui: UiService):
+    await cq.answer()
+    await ui.show_main_menu(cq.from_user.id, cq.message.chat.id)
+
 
 @router.callback_query(F.data == "support")
-async def support(cq: CallbackQuery):
+async def support(cq: CallbackQuery, ui: UiService):
     await cq.answer()
-    await cq.message.answer("🆘 Support: @admin_username")
+    text = "🆘 Support: @admin_username"
+    b = InlineKeyboardBuilder()
+    b.button(text="Назад", callback_data="main_menu")
+    await ui.render(cq.from_user.id, cq.message.chat.id, text, b.as_markup())
+
+
+@router.callback_query(F.data == "connect")
+async def connect(cq: CallbackQuery, ui: UiService):
+    await cq.answer()
+    text = (
+        "📡 Инструкция по подключению:\n"
+        "1. Скачайте приложение (V2Ray / etc.)\n"
+        "2. Импортируйте ключ из профиля.\n"
+        "3. Подключитесь."
+    )
+    b = InlineKeyboardBuilder()
+    b.button(text="Назад", callback_data="main_menu")
+    await ui.render(cq.from_user.id, cq.message.chat.id, text, b.as_markup())
+
 
 @router.callback_query(F.data == "profile")
-async def profile(cq: CallbackQuery, users: UsersRepo):
+async def profile(cq: CallbackQuery, ui: UiService, users: UsersRepo):
     await cq.answer()
-    u = await users.add_if_missing(cq.from_user.id, cq.from_user.username)
+    await users.add_if_missing(cq.from_user.id, cq.from_user.username)
+    await ui.show_profile(cq.from_user.id, cq.message.chat.id)
 
-    st = "🚫 BANNED" if u.is_banned else ("🟢 ACTIVE" if u.is_active else "🟠 PAUSED")
-    dl = days_left(u.active_until)
 
-    text = (
-        f"👤 ID: <code>{u.user_id}</code>\n"
-        f"💳 Balance: <code>{round(u.balance,2)}</code>\n"
-        f"📌 Status: {st}\n"
-        f"⏳ Days left: <code>{dl}</code>\n"
-        f"🗓 Until: <code>{u.active_until or '-'}</code>"
-    )
-    await cq.message.answer(text, reply_markup=profile_kb(u.is_active, u.is_banned), parse_mode="HTML")
-
-@router.callback_query(F.data == "get_key")
-async def get_key(cq: CallbackQuery, users: UsersRepo, subs: SubscriptionService):
-    await cq.answer()
-    ok, reason = await subs.can_use(cq.from_user.id)
-    if not ok:
-        await cq.message.answer(f"⚠️ Нет доступа: <code>{reason}</code>", parse_mode="HTML")
-        return
-    u = await users.get(cq.from_user.id)
-    await cq.message.answer(f"🔑 Ваш ключ:\n<code>{u.vpn_key}</code>", parse_mode="HTML")
-
-@router.callback_query(F.data == "activate")
-async def activate(cq: CallbackQuery, users: UsersRepo, subs: SubscriptionService):
-    await cq.answer()
-    u = await users.get(cq.from_user.id)
-    if not u or u.is_banned:
-        return
-
-    # простой расчёт: сколько дней купить за баланс
-    # (позже можно сделать тарифы/месяц)
-    if u.balance <= 0:
-        await cq.message.answer("⚠️ Баланс 0. Сначала пополни.")
-        return
-
-    daily_price = 5.0  # поставь из settings если хочешь
-    days = int(u.balance // daily_price)
-    if days <= 0:
-        await cq.message.answer("⚠️ Недостаточно средств на 1 день.")
-        return
-
-    # списываем сразу за days (минимально честно)
-    await users.add_balance(u.user_id, -days * daily_price)
-    await subs.activate(u.user_id, days)
-    await cq.message.answer(f"✅ Активировано на {days} дней. Открой профиль заново.")
-
-@router.callback_query(F.data == "pause")
-async def pause(cq: CallbackQuery, subs: SubscriptionService):
-    await cq.answer()
-    await subs.pause(cq.from_user.id)
-    await cq.message.answer("⏸ Поставлено на паузу. Открой профиль заново.")
-
-# ----------------- TOPUP (очень простой) -----------------
 @router.callback_query(F.data == "topup")
-async def topup(cq: CallbackQuery):
+async def topup(cq: CallbackQuery, ui: UiService):
     await cq.answer()
-    await cq.message.answer("Введите сумму (число), например: 150\nКоманда: /dep 150")
+    text = "Введите сумму (число), например: 150\nКоманда: /dep 150"
+    b = InlineKeyboardBuilder()
+    b.button(text="Назад", callback_data="main_menu")
+    await ui.render(cq.from_user.id, cq.message.chat.id, text, b.as_markup())
+
 
 @router.message(Command("dep"))
-async def dep_create(m: Message, pay: PaymentService, settings):
+async def dep_create(m: Message, pay: PaymentService, settings, ui: UiService):
     try:
         amount = float(m.text.split(maxsplit=1)[1])
     except Exception:
@@ -97,6 +74,10 @@ async def dep_create(m: Message, pay: PaymentService, settings):
 
     dep_id = await pay.create_deposit(m.from_user.id, amount)
     await m.answer("✅ Заявка создана. Ждите подтверждения.")
+    try:
+        await m.delete()
+    except Exception:
+        pass
 
     # админу
     try:
@@ -106,48 +87,64 @@ async def dep_create(m: Message, pay: PaymentService, settings):
             reply_markup=admin_deposit_kb(dep_id),
         )
     except Exception:
-        # если админ не нажал /start — будет chat not found, не падаем
         pass
 
+    await ui.show_main_menu(m.from_user.id, m.chat.id)
 # ----------------- ADMIN ACTIONS -----------------
+
 @router.callback_query(F.data.startswith("adm_dep_ok:"))
 async def adm_ok(cq: CallbackQuery, pay: PaymentService, settings):
-    await cq.answer()
+    # админ-check
     if cq.from_user.id != settings.admin_id:
+        await cq.answer("Ты не админ", show_alert=True)
         return
+
+    await cq.answer()
     dep_id = int(cq.data.split(":")[1])
+
     dr = await pay.approve(dep_id)
-    await cq.message.edit_text("✅ Approved" if dr else "⚠️ Already handled")
+    if not dr:
+        try:
+            await cq.message.edit_text("⚠️ Already handled")
+        except Exception:
+            pass
+        return
+
+    # важно: не даём исключениям откатывать commit
+    try:
+        await cq.message.edit_text("✅ Approved")
+    except Exception:
+        pass
+
+    try:
+        await cq.bot.send_message(dr.user_id, f"✅ Оплата принята на {dr.amount}")
+    except Exception:
+        pass
+
 
 @router.callback_query(F.data.startswith("adm_dep_no:"))
 async def adm_no(cq: CallbackQuery, pay: PaymentService, settings):
-    await cq.answer()
     if cq.from_user.id != settings.admin_id:
+        await cq.answer("Ты не админ", show_alert=True)
         return
+
+    await cq.answer()
     dep_id = int(cq.data.split(":")[1])
+
     dr = await pay.reject(dep_id)
-    await cq.message.edit_text("❌ Rejected" if dr else "⚠️ Already handled")
+    if not dr:
+        try:
+            await cq.message.edit_text("⚠️ Already handled")
+        except Exception:
+            pass
+        return
 
-@router.message(Command("ban"))
-async def ban(m: Message, users: UsersRepo, settings):
-    if m.from_user.id != settings.admin_id:
-        return
-    parts = m.text.split()
-    if len(parts) != 2:
-        await m.answer("Формат: /ban USER_ID")
-        return
-    uid = int(parts[1])
-    await users.set_ban(uid, True)
-    await m.answer(f"🚫 Banned {uid}")
+    try:
+        await cq.message.edit_text("❌ Rejected")
+    except Exception:
+        pass
 
-@router.message(Command("unban"))
-async def unban(m: Message, users: UsersRepo, settings):
-    if m.from_user.id != settings.admin_id:
-        return
-    parts = m.text.split()
-    if len(parts) != 2:
-        await m.answer("Формат: /unban USER_ID")
-        return
-    uid = int(parts[1])
-    await users.set_ban(uid, False)
-    await m.answer(f"✅ Unbanned {uid}")
+    try:
+        await cq.bot.send_message(dr.user_id, "❌ Оплата отклонена")
+    except Exception:
+        pass

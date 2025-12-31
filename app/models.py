@@ -20,6 +20,8 @@ class User(Base):
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
 
+    menu_message_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # добавлено для живого меню
+
 class DepositRequest(Base):
     __tablename__ = "deposit_requests"
 

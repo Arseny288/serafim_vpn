@@ -41,6 +41,14 @@ class UsersRepo:
         new_until = base + timedelta(days=days)
         await self.s.execute(update(User).where(User.user_id == user_id).values(active_until=new_until))
 
+    # добавлено для UI
+    async def set_menu_message_id(self, user_id: int, msg_id: int | None):
+        await self.s.execute(update(User).where(User.user_id == user_id).values(menu_message_id=msg_id))
+
+    async def get_menu_message_id(self, user_id: int) -> int | None:
+        res = await self.s.execute(select(User.menu_message_id).where(User.user_id == user_id))
+        return res.scalar()
+
 class DepositsRepo:
     def __init__(self, s: AsyncSession):
         self.s = s
