@@ -60,20 +60,22 @@ class SubscriptionService:
 
             # логинимся и добавляем
             if not self.xui.login():
-                raise RuntimeError("xui login failed")
+                raise RuntimeError("xui login failed - check XUI credentials and connection")
 
             ok = self.xui.add_client(Config.INBOUND_ID, client)
             if not ok:
-                raise RuntimeError("xui add_client failed")
+                raise RuntimeError(f"xui add_client failed - check XUI panel logs for inbound_id={Config.INBOUND_ID}")
 
             await self.users.set_vpn(tg_id, vpn_uuid, email)
 
         else:
             # если uuid уже есть — просто обновим expiry и включение
             if not self.xui.login():
-                raise RuntimeError("xui login failed")
+                raise RuntimeError("xui login failed - check XUI credentials and connection")
 
-            self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, True, expiry_ms)
+            ok = self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, True, expiry_ms)
+            if not ok:
+                raise RuntimeError(f"xui update_client failed - check XUI panel logs for uuid={u.vpn_uuid}")
 
     async def pause(self, tg_id: int):
         u = await self.users.get(tg_id)
@@ -82,10 +84,12 @@ class SubscriptionService:
             return
 
         if not self.xui.login():
-            raise RuntimeError("xui login failed")
+            raise RuntimeError("xui login failed - check XUI credentials and connection")
 
         expiry_ms = int((u.active_until.timestamp() * 1000)) if u.active_until else 0
-        self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, False, expiry_ms)
+        ok = self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, False, expiry_ms)
+        if not ok:
+            raise RuntimeError(f"xui update_client failed - check XUI panel logs for uuid={u.vpn_uuid}")
         await self.users.set_active(tg_id, False)
 
 

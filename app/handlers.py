@@ -3,9 +3,8 @@ from aiogram import Router, F
 from aiogram.filters import Command
 from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder  # ✅ ВАЖНО
-from .services import SubscriptionService, PaymentService, KeyService
-from .keyboards import main_kb, profile_kb, admin_deposit_kb
 from .services import SubscriptionService, PaymentService
+from .keyboards import main_kb, profile_kb, admin_deposit_kb
 from .ui import UiService
 from .repo import UsersRepo
 from app.config import Config
@@ -151,14 +150,17 @@ async def adm_no(cq: CallbackQuery, pay: PaymentService, settings):
     except Exception:
         pass
 
-def _sub(users: UsersRepo) -> SubscriptionService:
-    return SubscriptionService(users=users, keysvc=KeyService())
-
 @router.callback_query(F.data == "activate")
 async def activate(cq: CallbackQuery, ui: UiService, subs: SubscriptionService):
     await cq.answer()
-    await subs.activate(cq.from_user.id, days=30)
-    await ui.show_profile(cq.from_user.id, cq.message.chat.id)
+    try:
+        await subs.activate(cq.from_user.id, days=30)
+        await ui.show_profile(cq.from_user.id, cq.message.chat.id)
+    except Exception as e:
+        error_msg = str(e)
+        await cq.answer(f"Ошибка активации: {error_msg}", show_alert=True)
+        # Still show profile even if activation failed
+        await ui.show_profile(cq.from_user.id, cq.message.chat.id)
 
 
 @router.callback_query(F.data == "pause")
