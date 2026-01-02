@@ -1,5 +1,8 @@
 import json
+import logging
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class XuiPanel:
@@ -13,16 +16,16 @@ class XuiPanel:
         url = f"{self.base_url}/login"
         r = self.session.post(url, data={"username": self.username, "password": self.password}, timeout=10)
         if r.status_code != 200:
-            print(f"XUI login failed: status={r.status_code}, response={r.text}")
+            logger.error(f"XUI login failed: status={r.status_code}, response={r.text}")
             return False
         try:
             response_json = r.json()
             success = bool(response_json.get("success"))
             if not success:
-                print(f"XUI login failed: response={response_json}")
+                logger.error(f"XUI login failed: response={response_json}")
             return success
         except Exception as e:
-            print(f"XUI login exception: {e}, response={r.text}")
+            logger.error(f"XUI login exception: {e}, response={r.text}")
             return False
 
     def get_inbound(self, inbound_id: int) -> dict | None:
@@ -30,7 +33,7 @@ class XuiPanel:
         url = f"{self.base_url}/panel/api/inbounds/get/{inbound_id}"
         r = self.session.get(url, timeout=10)
         if r.status_code != 200:
-            print(f"XUI get_inbound failed: status={r.status_code}, response={r.text}")
+            logger.error(f"XUI get_inbound failed: status={r.status_code}, response={r.text}")
             return None
         try:
             response_json = r.json()
@@ -38,7 +41,7 @@ class XuiPanel:
                 return response_json.get("obj")
             return None
         except Exception as e:
-            print(f"XUI get_inbound exception: {e}, response={r.text}")
+            logger.error(f"XUI get_inbound exception: {e}, response={r.text}")
             return None
 
     def update_inbound(self, inbound_id: int, settings: dict) -> bool:
@@ -48,16 +51,16 @@ class XuiPanel:
         payload = {"id": inbound_id, "settings": json.dumps(settings)}
         r = self.session.post(url, json=payload, timeout=10)
         if r.status_code != 200:
-            print(f"XUI update_inbound failed: status={r.status_code}, response={r.text}")
+            logger.error(f"XUI update_inbound failed: status={r.status_code}, response={r.text}")
             return False
         try:
             response_json = r.json()
             success = bool(response_json.get("success"))
             if not success:
-                print(f"XUI update_inbound failed: response={response_json}")
+                logger.error(f"XUI update_inbound failed: response={response_json}")
             return success
         except Exception as e:
-            print(f"XUI update_inbound exception: {e}, response={r.text}")
+            logger.error(f"XUI update_inbound exception: {e}, response={r.text}")
             return False
 
     def add_client(self, inbound_id: int, client: dict) -> bool:
@@ -74,10 +77,10 @@ class XuiPanel:
                 pass
         
         # If addClient fails, try getting the inbound and updating it with all clients
-        print(f"XUI addClient direct failed, trying get+update approach...")
+        logger.info(f"XUI addClient direct failed, trying get+update approach...")
         inbound = self.get_inbound(inbound_id)
         if not inbound:
-            print(f"XUI add_client failed: could not get inbound {inbound_id}")
+            logger.error(f"XUI add_client failed: could not get inbound {inbound_id}")
             return False
         
         # Parse existing clients from inbound settings
@@ -109,7 +112,7 @@ class XuiPanel:
             return self.update_inbound(inbound_id, settings)
             
         except Exception as e:
-            print(f"XUI add_client exception parsing inbound: {e}")
+            logger.error(f"XUI add_client exception parsing inbound: {e}")
             return False
 
     def update_client(self, inbound_id: int, uuid_str: str, enable: bool, expiry_ms: int) -> bool:
@@ -133,14 +136,14 @@ class XuiPanel:
 
         r = self.session.post(url, json=payload, timeout=10)
         if r.status_code != 200:
-            print(f"XUI update_client failed: status={r.status_code}, response={r.text}")
+            logger.error(f"XUI update_client failed: status={r.status_code}, response={r.text}")
             return False
         try:
             response_json = r.json()
             success = bool(response_json.get("success"))
             if not success:
-                print(f"XUI update_client failed: response={response_json}")
+                logger.error(f"XUI update_client failed: response={response_json}")
             return success
         except Exception as e:
-            print(f"XUI update_client exception: {e}, response={r.text}")
+            logger.error(f"XUI update_client exception: {e}, response={r.text}")
             return False

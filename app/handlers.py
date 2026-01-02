@@ -151,10 +151,10 @@ async def adm_no(cq: CallbackQuery, pay: PaymentService, settings):
         pass
 
 @router.callback_query(F.data == "activate")
-async def activate(cq: CallbackQuery, ui: UiService, subs: SubscriptionService):
+async def activate(cq: CallbackQuery, ui: UiService, subs: SubscriptionService, settings):
     await cq.answer()
     try:
-        await subs.activate(cq.from_user.id, days=30)
+        await subs.activate(cq.from_user.id, days=30, settings=settings)
         await ui.show_profile(cq.from_user.id, cq.message.chat.id)
     except Exception as e:
         error_msg = str(e)
@@ -171,7 +171,7 @@ async def pause(cq: CallbackQuery, ui: UiService, subs: SubscriptionService):
 
 
 @router.callback_query(F.data == "get_key")
-async def get_key(cq: CallbackQuery, ui: UiService, users: UsersRepo, subs: SubscriptionService):
+async def get_key(cq: CallbackQuery, ui: UiService, users: UsersRepo, subs: SubscriptionService, xui_config):
     await cq.answer()
 
     ok, reason = await subs.can_use(cq.from_user.id)
@@ -191,7 +191,7 @@ async def get_key(cq: CallbackQuery, ui: UiService, users: UsersRepo, subs: Subs
         await cq.answer("Ключ ещё не создан. Нажмите «Активировать».", show_alert=True)
         return
 
-    link = build_vless_link(vpn_uuid=u.vpn_uuid, email=u.vpn_email)
+    link = build_vless_link(vpn_uuid=u.vpn_uuid, email=u.vpn_email, cfg=xui_config)
 
     text = (
         "🔑 <b>Ваш VPN-ключ</b>\n\n"

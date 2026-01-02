@@ -8,7 +8,7 @@ from .repo import UsersRepo, DepositsRepo
 from .services import SubscriptionService, PaymentService
 from .ui import UiService
 from .xui import XuiPanel
-from .config import Config
+from .config import load_xui_config
 
 
 class DbSessionMiddleware(BaseMiddleware):
@@ -27,9 +27,11 @@ class DbSessionMiddleware(BaseMiddleware):
             data["users"] = users
             data["deposits"] = deposits
 
-            xui = XuiPanel(Config.XUI_URL, Config.XUI_USER, Config.XUI_PASS)
+            xui_config = load_xui_config()
+            xui = XuiPanel(xui_config.url, xui_config.username, xui_config.password)
 
-            data["subs"] = SubscriptionService(users, xui)
+            data["subs"] = SubscriptionService(users, xui, xui_config)
+            data["xui_config"] = xui_config
             data["pay"] = PaymentService(users, deposits)
             data["ui"] = UiService(self.bot, users)
 

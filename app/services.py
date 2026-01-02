@@ -3,18 +3,15 @@ import uuid
 
 from .repo import UsersRepo, DepositsRepo
 from .xui import XuiPanel
-from .config import Config
+from .config import XuiConfig
 from .utils.vless import build_vless_link
 
-class KeyService:
-    async def gen_key(self, user_id: int) -> str:
-        # TODO: позже подключишь x-ui / панель генерации
-        return f"vless://uuid-{user_id}@premium.node:443?security=reality&sni=google.com#FlashVPN_{user_id}"
 
 class SubscriptionService:
-    def __init__(self, users: UsersRepo, xui: XuiPanel):
+    def __init__(self, users: UsersRepo, xui: XuiPanel, xui_config: XuiConfig | None = None):
         self.users = users
         self.xui = xui
+        self.xui_config = xui_config
 
     async def can_use(self, user_id: int) -> tuple[bool, str]:
         u = await self.users.get(user_id)
@@ -30,10 +27,18 @@ class SubscriptionService:
             return False, "expired"
         return True, "ok"
 
-    async def activate(self, tg_id: int, days: int = 30):
+    async def activate(self, tg_id: int, days: int = 30, settings=None):
         u = await self.users.get(tg_id)
         if not u:
             return
+
+        # Check balance if settings provided
+        if settings:
+            required_balance = (settings.monthly_price_rub / 30) * days
+            if u.balance < required_balance:
+                raise RuntimeError(f"Insufficient balance. Required: {required_balance:.2f}, Available: {u.balance:.2f}")
+            # Deduct balance
+            await self.users.add_balance(tg_id, -required_balance)
 
         # всегда делаем пользователя активным и продлеваем
         await self.users.set_active(tg_id, True)
@@ -62,9 +67,10 @@ class SubscriptionService:
             if not self.xui.login():
                 raise RuntimeError("xui login failed - check XUI credentials and connection")
 
-            ok = self.xui.add_client(Config.INBOUND_ID, client)
+            inbound_id = self.xui_config.inbound_id if self.xui_config else 2
+            ok = self.xui.add_client(inbound_id, client)
             if not ok:
-                raise RuntimeError(f"xui add_client failed - check XUI panel logs for inbound_id={Config.INBOUND_ID}")
+                raise RuntimeError(f"xui add_client failed - check XUI panel logs for inbound_id={inbound_id}")
 
             await self.users.set_vpn(tg_id, vpn_uuid, email)
 
@@ -73,7 +79,8 @@ class SubscriptionService:
             if not self.xui.login():
                 raise RuntimeError("xui login failed - check XUI credentials and connection")
 
-            ok = self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, True, expiry_ms)
+            inbound_id = self.xui_config.inbound_id if self.xui_config else 2
+            ok = self.xui.update_client(inbound_id, u.vpn_uuid, True, expiry_ms)
             if not ok:
                 raise RuntimeError(f"xui update_client failed - check XUI panel logs for uuid={u.vpn_uuid}")
 
@@ -87,7 +94,8 @@ class SubscriptionService:
             raise RuntimeError("xui login failed - check XUI credentials and connection")
 
         expiry_ms = int((u.active_until.timestamp() * 1000)) if u.active_until else 0
-        ok = self.xui.update_client(Config.INBOUND_ID, u.vpn_uuid, False, expiry_ms)
+        inbound_id = self.xui_config.inbound_id if self.xui_config else 2
+        ok = self.xui.update_client(inbound_id, u.vpn_uuid, False, expiry_ms)
         if not ok:
             raise RuntimeError(f"xui update_client failed - check XUI panel logs for uuid={u.vpn_uuid}")
         await self.users.set_active(tg_id, False)
